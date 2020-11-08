@@ -1,0 +1,4 @@
+# build folder
+[Bb]uild/
+[Bb]uild-*/
+[Cc]make-[Bb]uild-*/
