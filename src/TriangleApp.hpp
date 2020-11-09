@@ -35,6 +35,13 @@ namespace VkTri
         }
     };
 
+    struct SwapChainSupportDetails
+    {
+        vk::SurfaceCapabilitiesKHR capabilities;
+        vector<vk::SurfaceFormatKHR> formats;
+        vector<vk::PresentModeKHR> presentModes;
+    };
+
     class TriangleApp
     {
     private:
@@ -74,6 +81,12 @@ namespace VkTri
         // Device setup
         // ============
 
+        const vector<const char*> deviceExtensions = {
+                VK_KHR_SWAPCHAIN_EXTENSION_NAME
+        };
+
+        bool checkDeviceExtensionSupport(const vk::PhysicalDevice &device);
+
         /**
          * \brief Checks the capabilities of the provided device and returns a score.
          * \param device physical Vulkan device to analyze.
@@ -99,6 +112,31 @@ namespace VkTri
 
         QueueFamilyIndices checkQueueFamilies(const vk::PhysicalDevice &device);
 
+        // =============
+        // Surface Setup
+        // =============
+
+        vk::UniqueSurfaceKHR surface;
+
+        /**
+         * \brief Sets up the application's drawing surface.
+         */
+        void createSurface();
+
+        // ==========
+        // Swap Chain
+        // ==========
+
+        SwapChainSupportDetails querySwapChainSupport(const vk::PhysicalDevice &device);
+
+        static vk::SurfaceFormatKHR chooseSwapSurfaceFormat(const vector<vk::SurfaceFormatKHR> &availableFormats);
+
+        static vk::PresentModeKHR chooseSwapPresentMode(const vector<vk::PresentModeKHR> &availableModes);
+
+        vk::Extent2D chooseSwapExtent(const vk::SurfaceCapabilitiesKHR &capabilities);
+
+        void createSwapChain();
+
         // ===========
         // Debug Setup
         // ===========
@@ -116,17 +154,6 @@ namespace VkTri
         static VKAPI_ATTR vk::Bool32 VKAPI_CALL
         debugCallback(vk::DebugUtilsMessageSeverityFlagBitsEXT severity, vk::DebugUtilsMessageTypeFlagBitsEXT type,
                       const vk::DebugUtilsMessengerCallbackDataEXT *callbackData, void *userData);
-
-        // =============
-        // Surface Setup
-        // =============
-
-        vk::UniqueSurfaceKHR surface;
-
-        /**
-         * \brief Sets up the application's drawing surface.
-         */
-        void createSurface();
     public:
         static constexpr uint32_t WIDTH = 800; /**< Window width */
         static constexpr uint32_t HEIGHT = 600; /**< Window height */
