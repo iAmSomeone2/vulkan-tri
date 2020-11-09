@@ -10,6 +10,8 @@
 
 using namespace VkTri;
 
+VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE;
+
 void errHandler(int num, const char* desc)
 {
     throw std::runtime_error(fmt::format(FMT_STRING("GLFW Error ({:d}): {:s}"), num, desc));

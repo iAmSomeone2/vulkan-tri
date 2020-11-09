@@ -16,6 +16,14 @@ target_link_libraries(vk_tri
         fmt::fmt
         ${GLM_LIBRARIES})
 
+target_compile_features(vk_tri PUBLIC
+        cxx_std_17
+        cxx_auto_type
+        cxx_constexpr
+        cxx_nullptr
+        cxx_range_for
+        cxx_noexcept)
+
 if (${BUILD_TESTING})
     include(CTest)
     add_subdirectory(test)
