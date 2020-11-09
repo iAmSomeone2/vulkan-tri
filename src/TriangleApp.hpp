@@ -3,6 +3,7 @@
 #include <memory>
 #include <vector>
 #include <string>
+#include <optional>
 
 #define GLFW_INCLUDE_VULKAN
 extern "C"
@@ -23,16 +24,31 @@ namespace VkTri
     const uint32_t VIRTUAL_SCORE = 750u;
     const uint32_t CPU_ONLY_SCORE = 0u;
 
+    struct QueueFamilyIndices
+    {
+        std::optional<uint32_t> graphicsFamily;
+        std::optional<uint32_t> presentFamily;
+
+        [[nodiscard]] bool complete() const noexcept
+        {
+            return graphicsFamily.has_value() && presentFamily.has_value();
+        }
+    };
+
     class TriangleApp
     {
     private:
         vk::UniqueInstance instance; /**< Application Vulkan instance */
         vk::PhysicalDevice physicalDevice; /**< Physical device in use by the application */
+        vk::UniqueDevice logicalDevice; /**< Unique instance of logical Vulkan device. */
+        vk::Queue graphicsQueue; /**< Graphics queue used with the logical device. */
+        vk::Queue presentQueue; /**< Presentation queue used with the logical device. */
     protected:
         // Validation layers
         const vector<const char *> validationLayers = {
                 "VK_LAYER_KHRONOS_validation"
         };
+
 #ifdef NDEBUG
         static constexpr bool enableValidationLayers = false;
 #else
@@ -54,15 +70,38 @@ namespace VkTri
          */
         void createInstance();
 
-        static uint32_t getDeviceScore(const vk::PhysicalDevice &device);
+        // ============
+        // Device setup
+        // ============
 
+        /**
+         * \brief Checks the capabilities of the provided device and returns a score.
+         * \param device physical Vulkan device to analyze.
+         * \return score given to physical Vulkan device.
+         */
+        uint32_t getDeviceScore(const vk::PhysicalDevice &device);
+
+        /**
+         * \brief Decides on which physical device to use.
+         */
         void pickPhysicalDevice();
+
+        /**
+         * \brief Creates a Vulkan logical device from the provided physical device.
+         */
+        void createLogicalDevice();
 
         /**
          * \brief Polls the libraries in-use for the Vulkan extensions they require.
          * \return vector containing the names of the required extensions.
          */
         static vector<const char *> getRequiredExtensions();
+
+        QueueFamilyIndices checkQueueFamilies(const vk::PhysicalDevice &device);
+
+        // ===========
+        // Debug Setup
+        // ===========
 
         void setupDebugMessenger();
 
@@ -78,9 +117,19 @@ namespace VkTri
         debugCallback(vk::DebugUtilsMessageSeverityFlagBitsEXT severity, vk::DebugUtilsMessageTypeFlagBitsEXT type,
                       const vk::DebugUtilsMessengerCallbackDataEXT *callbackData, void *userData);
 
+        // =============
+        // Surface Setup
+        // =============
+
+        vk::UniqueSurfaceKHR surface;
+
+        /**
+         * \brief Sets up the application's drawing surface.
+         */
+        void createSurface();
     public:
-        static constexpr uint32_t WIDTH = 800;
-        static constexpr uint32_t HEIGHT = 600;
+        static constexpr uint32_t WIDTH = 800; /**< Window width */
+        static constexpr uint32_t HEIGHT = 600; /**< Window height */
 
         void run();
 

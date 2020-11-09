@@ -1,5 +1,6 @@
 #include <iostream>
 #include <map>
+#include <set>
 #include <cstring>
 #include <fmt/format.h>
 #include "TriangleApp.hpp"
@@ -19,11 +20,41 @@ TriangleApp::~TriangleApp()
     }
 }
 
+shared_ptr<TriangleApp> TriangleApp::create()
+{
+    auto triApp = std::make_shared<TriangleApp>();
+
+    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+    triApp->window = glfwCreateWindow(TriangleApp::WIDTH, TriangleApp::HEIGHT, "Vulkan Triangle", nullptr, nullptr);
+
+    triApp->createInstance();
+    triApp->setupDebugMessenger();
+    triApp->createSurface();
+    triApp->pickPhysicalDevice();
+    triApp->createLogicalDevice();
+
+    return triApp;
+}
+
+void TriangleApp::run()
+{
+    while (!glfwWindowShouldClose(this->window))
+    {
+        glfwPollEvents();
+    }
+    this->cleanup();
+}
+
 void TriangleApp::cleanup()
 {
     glfwDestroyWindow(this->window);
     this->window = nullptr;
 }
+
+// ===========
+// Debug
+// ===========
 
 void TriangleApp::setupDebugMessenger()
 {
@@ -67,25 +98,9 @@ vk::Bool32 TriangleApp::debugCallback(vk::DebugUtilsMessageSeverityFlagBitsEXT s
     return VK_FALSE;
 }
 
-vector<const char *> TriangleApp::getRequiredExtensions()
-{
-    uint32_t glfwExtensionCount = 0u;
-    const auto glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
-
-    vector<const char *> extensions;
-    extensions.reserve(glfwExtensionCount);
-    for (uint32_t i = 0u; i < glfwExtensionCount; ++i)
-    {
-        extensions.push_back(glfwExtensions[i]);
-    }
-
-    if (enableValidationLayers)
-    {
-        extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-    }
-
-    return extensions;
-}
+// ==============
+// Instance
+// ==============
 
 void TriangleApp::createInstance()
 {
@@ -139,6 +154,26 @@ void TriangleApp::createInstance()
     VULKAN_HPP_DEFAULT_DISPATCHER.init(*this->instance);
 }
 
+// ===========
+// Surface
+// ===========
+
+void TriangleApp::createSurface()
+{
+    VkSurfaceKHR _surface;
+    if (glfwCreateWindowSurface(this->instance.get(), this->window, nullptr, &_surface) != VK_SUCCESS)
+    {
+        throw std::runtime_error("Failed to create window surface.");
+    }
+
+    vk::ObjectDestroy<vk::Instance, VULKAN_HPP_DEFAULT_DISPATCHER_TYPE> _deleter(instance.get());
+    this->surface = vk::UniqueSurfaceKHR(vk::SurfaceKHR(_surface), _deleter);
+}
+
+// ============
+// Device
+// ============
+
 uint32_t TriangleApp::getDeviceScore(const vk::PhysicalDevice &device)
 {
     uint32_t score = 0u;
@@ -178,6 +213,13 @@ uint32_t TriangleApp::getDeviceScore(const vk::PhysicalDevice &device)
         return 0;
     }
 
+    // Confirm graphics capability
+    auto indices = this->checkQueueFamilies(device);
+    if (!indices.complete())
+    {
+        return 0;
+    }
+
     return score;
 }
 
@@ -191,7 +233,7 @@ void TriangleApp::pickPhysicalDevice()
 
     std::multimap<uint32_t, vk::PhysicalDevice> suitableDevices;
     uint32_t score;
-    for(const auto &device : devices)
+    for (const auto &device : devices)
     {
         score = TriangleApp::getDeviceScore(device);
         suitableDevices.insert(std::make_pair(score, device));
@@ -203,6 +245,55 @@ void TriangleApp::pickPhysicalDevice()
     }
 
     this->physicalDevice = suitableDevices.rbegin()->second;
+    std::clog << fmt::format("Selected device: {:s}\n", this->physicalDevice.getProperties().deviceName);
+}
+
+void TriangleApp::createLogicalDevice()
+{
+    auto indices = this->checkQueueFamilies(this->physicalDevice);
+
+    vector<vk::DeviceQueueCreateInfo> queueCreateInfos;
+    std::set<uint32_t> uniqueQueueFamilies = {indices.graphicsFamily.value(), indices.presentFamily.value()};
+    float queuePriority = 1.0f;
+    for (auto &queueFamily : uniqueQueueFamilies)
+    {
+        vk::DeviceQueueCreateInfo queueCreateInfo;
+        queueCreateInfo.queueFamilyIndex = queueFamily;
+        queueCreateInfo.queueCount = 1u;
+        queueCreateInfo.pQueuePriorities = &queuePriority;
+        queueCreateInfos.push_back(queueCreateInfo);
+    }
+
+    auto deviceFeatures = vk::PhysicalDeviceFeatures();
+
+    auto createInfo = vk::DeviceCreateInfo();
+    createInfo.pQueueCreateInfos = queueCreateInfos.data();
+    createInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
+    createInfo.pEnabledFeatures = &deviceFeatures;
+    if (enableValidationLayers)
+    {
+        createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
+        createInfo.ppEnabledLayerNames = validationLayers.data();
+    }
+    else
+    {
+        createInfo.enabledLayerCount = 0;
+    }
+
+    try
+    {
+        this->logicalDevice = this->physicalDevice.createDeviceUnique(createInfo);
+    }
+    catch (const std::runtime_error &err)
+    {
+        std::cerr << err.what() << std::endl;
+    }
+
+    // Make sure our dispatcher knows about the new device.
+    VULKAN_HPP_DEFAULT_DISPATCHER.init(this->logicalDevice.get());
+
+    this->graphicsQueue = this->logicalDevice->getQueue(indices.graphicsFamily.value(), 0);
+    this->presentQueue = this->logicalDevice->getQueue(indices.presentFamily.value(), 0);
 }
 
 bool TriangleApp::checkExtensionSupport(const char **required, const uint32_t &count)
@@ -291,6 +382,49 @@ bool TriangleApp::checkValidationLayerSupport()
     return false;
 }
 
+vector<const char *> TriangleApp::getRequiredExtensions()
+{
+    uint32_t glfwExtensionCount = 0u;
+    const auto glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
+
+    vector<const char *> extensions;
+    extensions.reserve(glfwExtensionCount);
+    for (uint32_t i = 0u; i < glfwExtensionCount; ++i)
+    {
+        extensions.push_back(glfwExtensions[i]);
+    }
+
+    if (enableValidationLayers)
+    {
+        extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+    }
+
+    return extensions;
+}
+
+QueueFamilyIndices TriangleApp::checkQueueFamilies(const vk::PhysicalDevice &device)
+{
+    auto queueFamilies = device.getQueueFamilyProperties();
+
+    QueueFamilyIndices indices;
+    uint32_t i = 0;
+    for (const auto &fam : queueFamilies)
+    {
+        if (fam.queueFlags & vk::QueueFlagBits::eGraphics)
+        {
+            indices.graphicsFamily = i;
+        }
+        else if (device.getSurfaceSupportKHR(i, this->surface.get()))
+        {
+            indices.presentFamily = i;
+        }
+
+        i++;
+    }
+
+    return indices;
+}
+
 vector<vk::ExtensionProperties> TriangleApp::getAvailableExtensions()
 {
     uint32_t count = 0u;
@@ -300,28 +434,4 @@ vector<vk::ExtensionProperties> TriangleApp::getAvailableExtensions()
     vk::enumerateInstanceExtensionProperties(nullptr, &count, extensions.data());
 
     return extensions;
-}
-
-shared_ptr<TriangleApp> TriangleApp::create()
-{
-    auto triApp = std::make_shared<TriangleApp>();
-
-    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
-    triApp->window = glfwCreateWindow(TriangleApp::WIDTH, TriangleApp::HEIGHT, "Vulkan Triangle", nullptr, nullptr);
-
-    triApp->createInstance();
-    triApp->setupDebugMessenger();
-    triApp->pickPhysicalDevice();
-
-    return triApp;
-}
-
-void TriangleApp::run()
-{
-    while (!glfwWindowShouldClose(this->window))
-    {
-        glfwPollEvents();
-    }
-    this->cleanup();
 }
