@@ -37,6 +37,7 @@ shared_ptr<TriangleApp> TriangleApp::create()
     triApp->createSurface();
     triApp->pickPhysicalDevice();
     triApp->createLogicalDevice();
+    triApp->createSemaphores();
     triApp->createSwapChain();
 
     return triApp;
@@ -270,13 +271,7 @@ void TriangleApp::createSwapChain()
     auto presentMode = this->chooseSwapPresentMode(swapChainSupport.presentModes);
     auto extent = this->chooseSwapExtent(swapChainSupport.capabilities);
 
-    uint32_t imageCount = std::max(swapChainSupport.capabilities.minImageCount + 1,
-                                   swapChainSupport.capabilities.maxImageCount);
-
-    if (imageCount > swapChainSupport.capabilities.maxImageCount && swapChainSupport.capabilities.maxImageCount != 0)
-    {
-        imageCount = swapChainSupport.capabilities.maxImageCount;
-    }
+    uint32_t imageCount = swapChainSupport.capabilities.maxImageCount >=3 ? 3 : 2;
 
     vk::SwapchainCreateInfoKHR createInfo;
     createInfo.surface = this->surface.get();
@@ -303,6 +298,41 @@ void TriangleApp::createSwapChain()
         createInfo.queueFamilyIndexCount = 0;
         createInfo.pQueueFamilyIndices = nullptr;
     }
+
+    createInfo.preTransform = swapChainSupport.capabilities.currentTransform;
+    createInfo.compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque;
+    createInfo.presentMode = presentMode;
+    createInfo.clipped = VK_TRUE;
+
+    vk::UniqueSwapchainKHR uniqueSC;
+    try
+    {
+        uniqueSC = logicalDevice->createSwapchainKHRUnique(createInfo);
+    }
+    catch (const std::runtime_error &err)
+    {
+        throw err;
+    }
+
+    this->swapChain = &uniqueSC.get();
+
+    this->swapChainImageFormat = surfaceFormat.format;
+    this->swapChainExtent = extent;
+}
+
+void TriangleApp::createSemaphores()
+{
+    this->imgAvailableSemaphore = this->logicalDevice->createSemaphoreUnique({});
+    this->renderingDoneSemaphore = this->logicalDevice->createSemaphoreUnique({});
+}
+
+// =================
+// Graphics Pipeline
+// =================
+
+void TriangleApp::createGraphicsPipeline()
+{
+
 }
 
 // ============

@@ -2,3 +2,6 @@
 [Bb]uild/
 [Bb]uild-*/
 [Cc]make-[Bb]uild-*/
+
+# compiled shader data
+*.spv

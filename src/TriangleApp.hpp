@@ -50,6 +50,21 @@ namespace VkTri
         vk::UniqueDevice logicalDevice; /**< Unique instance of logical Vulkan device. */
         vk::Queue graphicsQueue; /**< Graphics queue used with the logical device. */
         vk::Queue presentQueue; /**< Presentation queue used with the logical device. */
+
+        /**
+         * \brief Pointer to the application swap chain
+         *
+         * \details
+         * Giving the instance direct ownership of the UniqueSwapChain object causes the object to
+         * be deleted out of sequence. A pointer is used instead to allow Vulkan to manage the object
+         * lifetime.
+         */
+        vk::SwapchainKHR *swapChain;
+        vk::UniqueSemaphore imgAvailableSemaphore;
+        vk::UniqueSemaphore renderingDoneSemaphore;
+        vk::Format swapChainImageFormat;
+        vk::Extent2D swapChainExtent;
+        vector<vk::UniqueImageView> swapChainImageViews;
     protected:
         // Validation layers
         const vector<const char *> validationLayers = {
@@ -136,6 +151,14 @@ namespace VkTri
         vk::Extent2D chooseSwapExtent(const vk::SurfaceCapabilitiesKHR &capabilities);
 
         void createSwapChain();
+
+        void createSemaphores();
+
+        // =================
+        // Graphics Pipeline
+        // =================
+
+        void createGraphicsPipeline();
 
         // ===========
         // Debug Setup
