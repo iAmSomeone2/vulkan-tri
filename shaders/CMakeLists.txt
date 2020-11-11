@@ -6,7 +6,7 @@ find_program(GLSLC glslc HINTS
 
 set(VERTEX_SHADERS triangle.vert)
 
-set(COMPILED_VERTEX_SHADERS vert.spv)
+set(COMPILED_VERTEX_SHADERS ${CMAKE_CURRENT_BINARY_DIR}/vert.spv)
 set_source_files_properties(${COMPILED_VERTEX_SHADERS} PROPERTIES GENERATED TRUE)
 
 add_custom_command(OUTPUT ${COMPILED_VERTEX_SHADERS}
@@ -26,7 +26,7 @@ add_custom_target(vertex_shaders
 
 set(FRAGMENT_SHADERS triangle.frag)
 
-set(COMPILED_FRAGMENT_SHADERS frag.spv)
+set(COMPILED_FRAGMENT_SHADERS ${CMAKE_CURRENT_BINARY_DIR}/frag.spv)
 set_source_files_properties(${COMPILED_FRAGMENT_SHADERS} PROPERTIES GENERATED TRUE)
 
 add_custom_command(OUTPUT ${COMPILED_FRAGMENT_SHADERS}
@@ -44,3 +44,5 @@ add_custom_target(fragment_shaders
 
 add_custom_target(vulkan_shaders ALL
     DEPENDS fragment_shaders vertex_shaders)
+
+

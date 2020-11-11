@@ -3,6 +3,7 @@
 #include <memory>
 #include <vector>
 #include <string>
+#include <filesystem>
 #include <optional>
 
 #define GLFW_INCLUDE_VULKAN
@@ -12,17 +13,23 @@ extern "C"
 }
 
 #define VULKAN_HPP_DISPATCH_LOADER_DYNAMIC 1
+
 #include <vulkan/vulkan.hpp>
+
 using std::string;
 using std::vector;
 using std::shared_ptr;
+namespace fs = std::filesystem;
 
 namespace VkTri
 {
-    const uint32_t DISCRETE_SCORE = 1000u;
-    const uint32_t INTEGRATED_SCORE = 500u;
-    const uint32_t VIRTUAL_SCORE = 750u;
-    const uint32_t CPU_ONLY_SCORE = 0u;
+    const fs::path VERTEX_SHADER_PATH("../shaders/vert.spv");
+    const fs::path FRAGMENT_SHADER_PATH("../shaders/frag.spv");
+
+    static const uint32_t DISCRETE_SCORE = 1000u;
+    static const uint32_t INTEGRATED_SCORE = 500u;
+    static const uint32_t VIRTUAL_SCORE = 750u;
+    static const uint32_t CPU_ONLY_SCORE = 0u;
 
     struct QueueFamilyIndices
     {
@@ -65,6 +72,8 @@ namespace VkTri
         vk::Format swapChainImageFormat;
         vk::Extent2D swapChainExtent;
         vector<vk::UniqueImageView> swapChainImageViews;
+
+        vk::UniquePipelineLayout pipelineLayout;
     protected:
         // Validation layers
         const vector<const char *> validationLayers = {
@@ -96,7 +105,7 @@ namespace VkTri
         // Device setup
         // ============
 
-        const vector<const char*> deviceExtensions = {
+        const vector<const char *> deviceExtensions = {
                 VK_KHR_SWAPCHAIN_EXTENSION_NAME
         };
 
@@ -160,6 +169,8 @@ namespace VkTri
 
         void createGraphicsPipeline();
 
+        vk::UniqueShaderModule createShaderModule(const vector<uint8_t> &data);
+
         // ===========
         // Debug Setup
         // ===========
@@ -177,6 +188,7 @@ namespace VkTri
         static VKAPI_ATTR vk::Bool32 VKAPI_CALL
         debugCallback(vk::DebugUtilsMessageSeverityFlagBitsEXT severity, vk::DebugUtilsMessageTypeFlagBitsEXT type,
                       const vk::DebugUtilsMessengerCallbackDataEXT *callbackData, void *userData);
+
     public:
         static constexpr uint32_t WIDTH = 800; /**< Window width */
         static constexpr uint32_t HEIGHT = 600; /**< Window height */
@@ -191,8 +203,10 @@ namespace VkTri
 
         bool checkValidationLayerSupport();
 
-        static vector<vk::ExtensionProperties> getAvailableExtensions();
+        [[nodiscard]] static vector<vk::ExtensionProperties> getAvailableExtensions();
 
-        static shared_ptr<TriangleApp> create();
+        [[nodiscard]] static shared_ptr<TriangleApp> create();
+
+        [[nodiscard]] static vector<uint8_t> readFile(const fs::path &filePath);
     };
 }

@@ -3,6 +3,8 @@
 #include <set>
 #include <array>
 #include <algorithm>
+#include <fstream>
+#include <thread>
 #include <cstring>
 #include <fmt/format.h>
 #include "TriangleApp.hpp"
@@ -30,6 +32,7 @@ shared_ptr<TriangleApp> TriangleApp::create()
 
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+    glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
     triApp->window = glfwCreateWindow(TriangleApp::WIDTH, TriangleApp::HEIGHT, "Vulkan Triangle", nullptr, nullptr);
 
     triApp->createInstance();
@@ -39,6 +42,9 @@ shared_ptr<TriangleApp> TriangleApp::create()
     triApp->createLogicalDevice();
     triApp->createSemaphores();
     triApp->createSwapChain();
+    triApp->createGraphicsPipeline();
+
+    glfwShowWindow(triApp->window);
 
     return triApp;
 }
@@ -48,6 +54,10 @@ void TriangleApp::run()
     while (!glfwWindowShouldClose(this->window))
     {
         glfwPollEvents();
+
+        // Reduce CPU usage by making the thread sleep.
+        // This should be changed to follow the rendering pipeline later.
+        std::this_thread::sleep_for(std::chrono::milliseconds(16));
     }
     this->cleanup();
 }
@@ -56,6 +66,24 @@ void TriangleApp::cleanup()
 {
     glfwDestroyWindow(this->window);
     this->window = nullptr;
+}
+
+vector<uint8_t> TriangleApp::readFile(const fs::path &filePath)
+{
+    auto fileStream = std::ifstream(filePath, std::ios::ate | std::ios::binary);
+    if (!fileStream.is_open())
+    {
+        throw std::runtime_error(fmt::format("Failed to open file: {:s}", filePath.string()));
+    }
+
+    uint32_t fileSize = static_cast<uint32_t>(fileStream.tellg());
+    fileStream.seekg(std::ios::beg);
+    auto buffer = vector<uint8_t>(fileSize);
+
+    fileStream.read(reinterpret_cast<char *>(buffer.data()), fileSize);
+    fileStream.close();
+
+    return buffer;
 }
 
 // ===========
@@ -271,7 +299,7 @@ void TriangleApp::createSwapChain()
     auto presentMode = this->chooseSwapPresentMode(swapChainSupport.presentModes);
     auto extent = this->chooseSwapExtent(swapChainSupport.capabilities);
 
-    uint32_t imageCount = swapChainSupport.capabilities.maxImageCount >=3 ? 3 : 2;
+    uint32_t imageCount = swapChainSupport.capabilities.maxImageCount >= 3 ? 3 : 2;
 
     vk::SwapchainCreateInfoKHR createInfo;
     createInfo.surface = this->surface.get();
@@ -332,7 +360,119 @@ void TriangleApp::createSemaphores()
 
 void TriangleApp::createGraphicsPipeline()
 {
+    // Set up shader stages
+    auto vertShaderData = readFile(VERTEX_SHADER_PATH);
+    auto fragShaderData = readFile(FRAGMENT_SHADER_PATH);
 
+    auto vertShaderModule = this->createShaderModule(vertShaderData);
+    auto fragShaderModule = this->createShaderModule(fragShaderData);
+
+    vk::PipelineShaderStageCreateInfo vertShaderStageInfo;
+    vertShaderStageInfo.stage = vk::ShaderStageFlagBits::eVertex;
+    vertShaderStageInfo.module = vertShaderModule.get();
+    vertShaderStageInfo.pName = "main";
+
+    vk::PipelineShaderStageCreateInfo fragShaderStageInfo;
+    fragShaderStageInfo.stage = vk::ShaderStageFlagBits::eFragment;
+    fragShaderStageInfo.module = fragShaderModule.get();
+    fragShaderStageInfo.pName = "main";
+
+    array<vk::PipelineShaderStageCreateInfo, 2> shaderStages = {vertShaderStageInfo, fragShaderStageInfo};
+
+    // Set up vertex input
+    vk::PipelineVertexInputStateCreateInfo vertexInputInfo;
+    vertexInputInfo.vertexBindingDescriptionCount = 0;
+    vertexInputInfo.pVertexBindingDescriptions = nullptr;
+    vertexInputInfo.vertexAttributeDescriptionCount = 0;
+    vertexInputInfo.pVertexAttributeDescriptions = nullptr;
+
+    // Set up input assembly
+    vk::PipelineInputAssemblyStateCreateInfo inputAssembly;
+    inputAssembly.topology = vk::PrimitiveTopology::eTriangleList;
+    inputAssembly.primitiveRestartEnable = VK_FALSE;
+
+    // Set up viewport
+    vk::Viewport viewport;
+    viewport.x = 0.0f;
+    viewport.y = 0.0f;
+    viewport.width = static_cast<float>(this->swapChainExtent.width);
+    viewport.height = static_cast<float>(this->swapChainExtent.height);
+    viewport.minDepth = 0.0f;
+    viewport.maxDepth = 1.0f;
+
+    vk::Rect2D scissor;
+    scissor.offset.x = 0;
+    scissor.offset.y = 0;
+    scissor.extent = swapChainExtent;
+
+    vk::PipelineViewportStateCreateInfo viewportState;
+    viewportState.viewportCount = 1;
+    viewportState.pViewports = &viewport;
+    viewportState.scissorCount = 1;
+    viewportState.pScissors = &scissor;
+
+    // Set up rasterizer
+    vk::PipelineRasterizationStateCreateInfo rasterizer;
+    rasterizer.depthClampEnable = VK_FALSE;
+    rasterizer.rasterizerDiscardEnable = VK_FALSE;
+    rasterizer.polygonMode = vk::PolygonMode::eFill;
+    rasterizer.lineWidth = 1.0f;
+    rasterizer.cullMode = vk::CullModeFlagBits::eBack;
+    rasterizer.frontFace = vk::FrontFace::eClockwise;
+    rasterizer.depthBiasEnable = VK_FALSE;
+    rasterizer.depthBiasConstantFactor = 0.0f;
+    rasterizer.depthBiasClamp = 0.0f;
+    rasterizer.depthBiasSlopeFactor = 0.0f;
+
+    // Set up multisampling
+    vk::PipelineMultisampleStateCreateInfo multisampling;
+    multisampling.sampleShadingEnable = VK_FALSE;
+    multisampling.rasterizationSamples = vk::SampleCountFlagBits::e1;
+    multisampling.minSampleShading = 1.0f; // Optional
+    multisampling.pSampleMask = nullptr; // Optional
+    multisampling.alphaToCoverageEnable = VK_FALSE; // Optional
+    multisampling.alphaToOneEnable = VK_FALSE; // Optional
+
+    // Set up color blending
+    vk::PipelineColorBlendAttachmentState colorBlendAttachment;
+    colorBlendAttachment.colorWriteMask =
+            vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB |
+            vk::ColorComponentFlagBits::eA;
+    colorBlendAttachment.blendEnable = VK_TRUE;
+    colorBlendAttachment.srcColorBlendFactor = vk::BlendFactor::eSrcAlpha;
+    colorBlendAttachment.dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
+    colorBlendAttachment.colorBlendOp = vk::BlendOp::eAdd;
+    colorBlendAttachment.srcAlphaBlendFactor = vk::BlendFactor::eOne;
+    colorBlendAttachment.dstColorBlendFactor = vk::BlendFactor::eZero;
+    colorBlendAttachment.alphaBlendOp = vk::BlendOp::eAdd;
+
+    vk::PipelineColorBlendStateCreateInfo colorBlending;
+    colorBlending.logicOpEnable = VK_TRUE;
+    colorBlending.logicOp = vk::LogicOp::eCopy;
+    colorBlending.attachmentCount = 1;
+    colorBlending.pAttachments = &colorBlendAttachment;
+    colorBlending.blendConstants[0] = 0.0f; // Optional
+    colorBlending.blendConstants[1] = 0.0f; // Optional
+    colorBlending.blendConstants[2] = 0.0f; // Optional
+    colorBlending.blendConstants[3] = 0.0f; // Optional
+
+    // Set up pipeline layout
+    vk::PipelineLayoutCreateInfo pipelineLayoutInfo;
+    pipelineLayoutInfo.setLayoutCount = 0;
+    pipelineLayoutInfo.pSetLayouts = nullptr;
+    pipelineLayoutInfo.pushConstantRangeCount = 0;
+    pipelineLayoutInfo.pPushConstantRanges = nullptr;
+
+    this->pipelineLayout = this->logicalDevice->createPipelineLayoutUnique(pipelineLayoutInfo);
+}
+
+vk::UniqueShaderModule TriangleApp::createShaderModule(const vector<uint8_t> &data)
+{
+    vk::ShaderModuleCreateInfo createInfo;
+    createInfo.codeSize = data.size();
+    createInfo.pCode = reinterpret_cast<const uint32_t *>(data.data());
+
+    return this->logicalDevice->createShaderModuleUnique(createInfo);
 }
 
 // ============
